@@ -1,0 +1,178 @@
+---
+title: "tidytuesday"
+description: 
+  2021w20
+author:
+  - name: Jenna Eagleson 
+date: "`r Sys.Date()`"
+output: distill::distill_article
+---
+
+# set up
+
+```{r}
+library(tidytuesdayR) # get tidytuesday data
+library(tidyverse) # use for all the data cleaning
+library(here) # helps with saving/navigating directory
+library(janitor) # cleans column names
+library(viridis) # color palette package
+library(ggridges) # ridgeplot
+```
+
+# load data
+
+```{r echo=FALSE, message = FALSE}
+tuesdata <- tidytuesdayR::tt_load(2021, week = 20)
+broadband <-tuesdata$broadband
+```
+
+# eda
+
+```{r}
+glimpse(broadband)
+```
+
+# clean data
+
+Use the janitor package to standardize column headers. Apparently this is a common step.
+
+```{r}
+broadband_cc <- broadband %>%
+  janitor::clean_names()
+```
+
+Oh neat! Here is before and after:
+
+**Before:**
+
+```{r}
+colnames(broadband)
+```
+**After:**
+
+```{r}
+colnames(broadband_cc)
+```
+
+
+Now we need to make broadband$ usage numeric but some counties have "-" as a value. So first remove the "-" and then make numeric:
+
+```{r}
+broadband_plot <- broadband_cc %>%
+  filter(broadband_usage != "-") %>%
+  mutate(broadband_usage = as.numeric(broadband_usage))
+```
+
+# Plotting
+
+Now we can look at broadband usage by state:
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = st, y = broadband_usage)) +
+  geom_boxplot()
+```
+Now we are getting somewhere! That's exciting. Let's do what Jesse did and sort by broadband usage so it is easier to pull out trends.
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) +
+  geom_boxplot()
+```
+Ayyy, now we are getting somewhere. Will this work with a violin plot?
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) +
+  geom_violin()
+```
+It looks like it could potentially work but right now there is too much data. After we do our box plots we can see if there are countries we want to hone in on more with a violin plot. So let's go back to the box plot and flip the axis so it's easier to read.
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) +
+  geom_boxplot() +
+  coord_flip()
+```
+Yes, I like this. NOw just going to do some formatting clean up for prettiness.
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage)) +
+  geom_boxplot() +
+  coord_flip() +
+    labs(title = "Interesting title coming soon",
+       caption =  "Design: Jenna Eagleson | Source: Microsoft GitHub | #TidyTuesday 2021W20") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 10),
+        legend.position = "none") 
+```
+
+You know what would be really cool? If we could color code this by region... here goes nothing! I found these two resources online [state to region](https://stackoverflow.com/questions/47698470/how-to-create-region-indicator-variables-from-a-state-list-in-r) and [add list values to dataframe](https://stackoverflow.com/questions/46066974/add-column-to-label-u-s-states-by-their-u-s-census-region/46067040). Let's see if I can get it to work.
+
+```{r}
+regions <- list(
+  west = c("WA", "OR", "CA", "NV", "AZ", "ID", "MT", "WY",
+          "CO", "NM", "UT", "AK", "HI"),
+  south = c("TX", "OK", "AR", "LA", "MS", "AL", "TN", "KY",
+           "GA", "FL", "SC", "NC", "VA", "WV"),
+  midwest = c("KS", "NE", "SD", "ND", "MN", "MO", "IA", "IL",
+             "IN", "MI", "WI", "OH"),
+  northeast = c("ME", "NH", "NY", "MA", "RI", "VT", "PA", 
+              "NJ", "CT", "DE", "MD", "DC")
+)
+
+broadband_plot$regions <- sapply(broadband_plot$st,
+                                 function(x) names(regions)[grep(x, regions)])
+
+glimpse(broadband_plot)
+```
+IT WORKED!!!!! WOW!
+
+```{r}
+broadband_plot %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage, fill = regions)) +
+  geom_boxplot() +
+  coord_flip() +
+  scale_fill_viridis(discrete = TRUE, option = "C") +
+    labs(title = "The northeast leads broadband internet use",
+       caption =  "Design: Jenna Eagleson | Source: Microsoft GitHub | #TidyTuesday 2021W20") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_text(size = 10)) 
+```
+
+I feel like i'm going too much into it at this point but I feel like I should do the highlighting like I did in week 19 for only the northeast.
+
+```{r message = FALSE}
+broadband_plot %>%
+  mutate(highlight_northeast = ifelse(regions == 'northeast', T, F)) %>%
+  ggplot(aes(x = reorder(st, broadband_usage), y = broadband_usage, fill = highlight_northeast)) +
+  geom_boxplot() +
+  coord_flip() +
+  scale_fill_manual(values = c('#D9D9D9', '#000080')) +
+    labs(title = "The Northeast Leads Broadband Internet Use",
+       caption =  "Design: Jenna Eagleson | Source: Microsoft GitHub | #TidyTuesday 2021W20") +
+  theme_minimal() +
+  theme(plot.title = element_text(color = '#000080'),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.title = element_blank(),
+        axis.ticks = element_blank(),
+        axis.text.x = element_blank(),
+        legend.position = "none") 
+
+ggsave("C:/Users/jeagleson/Documents/Learn/tidytuesday/images/2021-05-12_broadband_boxplot.png", last_plot())
+ggsave("C:/Users/jeagleson/Documents/Learn/tidytuesday/images/2021-05-12_broadband_boxplot.pdf", last_plot())
+```
